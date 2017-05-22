@@ -95,6 +95,10 @@ struct picture_t
     unsigned int    i_nb_fields;                  /**< # of displayed fields */
     void          * context;          /**< video format-specific data pointer,
              * must point to a (void (*)(void*)) pointer to free the context */
+
+    /* keep track of the frameNumber, JS 11/15 */
+    int64_t frameNumber;
+
     /**@}*/
 
     /** Private data - the video output plugin might want to put stuff here to

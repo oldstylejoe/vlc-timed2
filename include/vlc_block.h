@@ -117,6 +117,9 @@ struct block_t
 
     /* Rudimentary support for overloading block (de)allocation. */
     block_free_t pf_release;
+    
+    //Record the position in the overall file, JS 5/17
+    int64_t i_pos;
 };
 
 /****************************************************************************

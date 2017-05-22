@@ -477,10 +477,11 @@ static block_t *DoWork( filter_t * p_filter, block_t * p_in_buf )
         p_out_buf->p_buffer );
 
     p_out_buf->i_buffer     = bytes_out;
-    p_out_buf->i_nb_samples = bytes_out / p->bytes_per_frame;
-    p_out_buf->i_dts        = p_in_buf->i_dts;
-    p_out_buf->i_pts        = p_in_buf->i_pts;
-    p_out_buf->i_length     = p_in_buf->i_length;
+    block_CopyProperties(p_out_buf, p_in_buf);  //do the copy using the block utils JS, 11/15
+    p_out_buf->i_nb_samples = bytes_out / p->bytes_per_frame;   //nb_samples has changed
+    //p_out_buf->i_dts        = p_in_buf->i_dts;
+    //p_out_buf->i_pts        = p_in_buf->i_pts;
+    //p_out_buf->i_length     = p_in_buf->i_length;
 
     block_Release( p_in_buf );
     return p_out_buf;

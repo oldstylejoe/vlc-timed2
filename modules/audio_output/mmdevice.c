@@ -33,6 +33,10 @@
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
 
+//For the data logging, JS 5/17
+#include <stdio.h>
+#include <time.h>
+
 DEFINE_PROPERTYKEY(PKEY_Device_FriendlyName, 0xa45c254e, 0xdf1c, 0x4efd,
    0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0, 14);
 
@@ -118,6 +122,9 @@ struct aout_sys_t
 
     LONG refs;
     unsigned ducks;
+    
+    //make a data log file, JS 5/17
+    FILE *p_dataLog;
 
     wchar_t *device; /**< Requested device identifier, NULL if none */
     float volume; /**< Requested volume, negative if none */
@@ -167,8 +174,21 @@ static void Play(audio_output_t *aout, block_t *block)
     HRESULT hr;
 
     EnterMTA();
+
+    //record the actual time, JS 11/15
+    //may be about 20us before the start time. Should be constant latency
+    FILETIME tm;
+    GetSystemTimePreciseAsFileTime(&tm);
+
     hr = aout_stream_Play(sys->stream, block);
+
     LeaveMTA();
+
+    //save presentation data to a file, JS 11/15
+    ULONGLONG t = ((ULONGLONG)tm.dwHighDateTime << 32) | (ULONGLONG)tm.dwLowDateTime;
+    fprintf(sys->p_dataLog, "%" PRId64 " %" PRId64 " %" PRId64 " %" PRId64"\n",
+            block->i_pos, block->i_pts, block->i_length, t);
+    fflush(sys->p_dataLog);
 
     vlc_FromHR(aout, hr);
 }
@@ -1229,6 +1249,8 @@ static void Stop(audio_output_t *aout)
 
 static int Open(vlc_object_t *obj)
 {
+
+msg_Dbg(obj, "gh1: mmdevice audio opened");
     audio_output_t *aout = (audio_output_t *)obj;
 
     aout_sys_t *sys = malloc(sizeof (*sys));
@@ -1282,6 +1304,37 @@ static int Open(vlc_object_t *obj)
     LeaveCriticalSection(&sys->lock);
     LeaveMTA(); /* Leave MTA after thread has entered MTA */
 
+    //setup the output file, JS 5/17
+    time_t rawTime;
+    struct tm *p_timeinfo;
+    char buffer[80];
+    time(&rawTime);
+    p_timeinfo = localtime(&rawTime);
+    strftime(buffer,80,"%Y.%m.%d.%H.%M.%S",p_timeinfo);
+    char fname[1024];
+    strcpy(fname, "C:\\DataLogs\\movies\\audiolog_");
+    strcat(fname, buffer);
+    strcat(fname, ".txt");
+    sys->p_dataLog = fopen(fname, "a");
+    if(sys->p_dataLog == NULL) {
+        msg_Err(aout, "Could not open the audio output file ... this is fatal");
+        exit(-1);
+    }
+    fprintf(sys->p_dataLog, "#Audio record file\n");
+    fprintf(sys->p_dataLog, "#frame - microsecs since the start of the movie (frame=0) the frame should be presented.\n");
+    fprintf(sys->p_dataLog, "#        This is the frame order time, not presentation time. Use to decode frame number.\n");
+    fprintf(sys->p_dataLog, "#        The number may go up and down if the user skips around in the movie.\n");
+    fprintf(sys->p_dataLog, "#pts   - Sequential time in microsecs that the frame should be displayed.\n");
+    fprintf(sys->p_dataLog, "#        This is used internally by VLC to align the video, and we can use it too.\n");
+    fprintf(sys->p_dataLog, "#length- The number of sample points loaded.\n");
+    fprintf(sys->p_dataLog, "#        The frame can repeat if there is more data than fit in the buffer.\n");
+    fprintf(sys->p_dataLog, "#time  - Actual time the frame is put onto the audio buffer.\n");
+    fprintf(sys->p_dataLog, "#        The time it is played is about 20us later.\n");
+    fprintf(sys->p_dataLog, "#\n");
+    fprintf(sys->p_dataLog, "#The name of the file contains the wall clock start time (approximate) of the movie.\n");
+    fprintf(sys->p_dataLog, "#Information about the subject, movie, and etc. is stored in the other movie file at a slower rate.\n");
+    fprintf(sys->p_dataLog, "#\n");
+    fprintf(sys->p_dataLog, "#frame pts length time\n");
     aout->start = Start;
     aout->stop = Stop;
     aout->time_get = TimeGet;
@@ -1305,6 +1358,12 @@ static void Close(vlc_object_t *obj)
     aout_sys_t *sys = aout->sys;
 
     EnterCriticalSection(&sys->lock);
+    //Clean up the file, JS 5/17
+    //Not location within the critical section.
+    if(sys->p_dataLog != NULL) {
+        fclose(sys->p_dataLog);
+    }
+
     sys->device = default_device; /* break out of MMSession() loop */
     sys->it = NULL; /* break out of MMThread() loop */
     WakeConditionVariable(&sys->work);

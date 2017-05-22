@@ -491,6 +491,11 @@ static block_t *DecodeBlock( decoder_t *p_dec, block_t **pp_block )
                                           frame.samples / nbChannels )
                           - p_out->i_pts;
 
+        //update the position within the file, JS 11/15
+        //msg_Dbg(p_dec, "faad.c gh1 %" PRId64, p_block->i_dts);
+        p_out->i_dts = p_block->i_dts;
+        p_out->i_pos = p_block->i_dts;
+
         DoReordering( (uint32_t *)p_out->p_buffer, samples,
                       frame.samples / nbChannels, nbChannels,
                       p_sys->pi_channel_positions );

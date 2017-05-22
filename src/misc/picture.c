@@ -125,6 +125,7 @@ void picture_Reset( picture_t *p_picture )
     p_picture->b_progressive = false;
     p_picture->i_nb_fields = 2;
     p_picture->b_top_field_first = false;
+    p_picture->frameNumber = 0;  //JS 11/15
     PictureDestroyContext( p_picture );
 }
 
@@ -353,6 +354,8 @@ void picture_CopyProperties( picture_t *p_dst, const picture_t *p_src )
     p_dst->b_progressive = p_src->b_progressive;
     p_dst->i_nb_fields = p_src->i_nb_fields;
     p_dst->b_top_field_first = p_src->b_top_field_first;
+    
+    p_dst->frameNumber = p_src->frameNumber; //JS 5/17
 }
 
 void picture_CopyPixels( picture_t *p_dst, const picture_t *p_src )

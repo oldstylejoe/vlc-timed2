@@ -191,6 +191,9 @@ struct vout_display_sys_t
         RGBQUAD    blue;
     };
 #endif
+
+    //make a data log file, JS 5/17
+    FILE *p_dataLog;
 };
 
 /*****************************************************************************

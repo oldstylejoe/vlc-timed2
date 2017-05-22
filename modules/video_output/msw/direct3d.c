@@ -47,6 +47,10 @@
 #include <windows.h>
 #include <d3d9.h>
 
+//For the data logging, JS 5/17
+#include <stdio.h>
+#include <time.h>
+
 #include "common.h"
 #include "builtin_shaders.h"
 
@@ -107,6 +111,8 @@ struct picture_sys_t
 {
     LPDIRECT3DSURFACE9 surface;
     picture_t          *fallback;
+    
+    int frame; //JS 5/17
 };
 
 static int  Open(vlc_object_t *);
@@ -192,6 +198,36 @@ static int Open(vlc_object_t *object)
     if (CommonInit(vd))
         goto error;
 
+    //setup the output file, JS 11/15
+    time_t rawTime;
+    struct tm *p_timeinfo;
+    char buffer[80];
+    time(&rawTime);
+    p_timeinfo = localtime(&rawTime);
+    strftime(buffer,80,"%Y.%m.%d.%H.%M.%S",p_timeinfo);
+    char fname[1024];
+    strcpy(fname, "C:\\DataLogs\\movies\\movielog_");
+    strcat(fname, buffer);
+    strcat(fname, ".txt");
+    sys->p_dataLog = fopen(fname, "a");
+    if(sys->p_dataLog == NULL) {
+        msg_Err(vd, "Could not open the output file ... this is fatal");
+        exit(-1);
+    }
+    fprintf(sys->p_dataLog, "#Movie record file\n");
+    fprintf(sys->p_dataLog, "#frame - microsecs since the start of the movie (frame=0) the frame should be presented.\n");
+    fprintf(sys->p_dataLog, "#        This is the frame order time, not presentation time. Use to decode frame number.\n");
+    fprintf(sys->p_dataLog, "#        The number may go up and down if the user skips around in the movie.\n");
+    fprintf(sys->p_dataLog, "#pts   - Sequential time in microsecs that the frame should be displayed.\n");
+    fprintf(sys->p_dataLog, "#        This is used internally by VLC to align the audio, and we can use it too.\n");
+    fprintf(sys->p_dataLog, "#time  - Actual time the frame is put onto the video buffer.\n");
+    fprintf(sys->p_dataLog, "#        The time it appears on the screen is 1/60th of second later.\n");
+    fprintf(sys->p_dataLog, "#\n");
+    fprintf(sys->p_dataLog, "#The name of the file contains the wall clock start time (approximate) of the movie.\n");
+    fprintf(sys->p_dataLog, "#Information about the subject, movie, and etc. is stored in the other movie file at a slower rate.\n");
+    fprintf(sys->p_dataLog, "#\n");
+    fprintf(sys->p_dataLog, "#frame pts time\n");
+
     /* */
     video_format_t fmt;
     if (Direct3DOpen(vd, &fmt)) {
@@ -260,6 +296,11 @@ static void Close(vlc_object_t *object)
 
     var_DelCallback(vd, "video-wallpaper", DesktopCallback, NULL);
     vlc_mutex_destroy(&vd->sys->lock);
+
+    //Clean up the file, JS 5/17
+    if(vd->sys->p_dataLog != NULL) {
+        fclose(vd->sys->p_dataLog);
+    }
 
     Direct3DClose(vd);
 
@@ -348,9 +389,19 @@ static void Display(vout_display_t *vd, picture_t *picture, subpicture_t *subpic
     // No stretching should happen here !
     const RECT src = sys->rect_dest_clipped;
     const RECT dst = sys->rect_dest_clipped;
+    //logging inserted here, JS 5/17
+    FILETIME tm;
+    GetSystemTimePreciseAsFileTime(&tm);
     HRESULT hr = IDirect3DDevice9_Present(d3ddev, &src, &dst, NULL, NULL);
     if (FAILED(hr)) {
         msg_Dbg(vd, "%s:%d (hr=0x%0lX)", __FUNCTION__, __LINE__, hr);
+    } else {  //record the time and frame number. This is really hacked. TODO: should be in a threaded log file. JS 5/17
+        ULONGLONG t = ((ULONGLONG)tm.dwHighDateTime << 32) | (ULONGLONG)tm.dwLowDateTime;
+        mtime_t pts = picture->date;
+        int64_t frameNumber = picture->frameNumber;
+        //msg_Dbg(vd, "frame %" PRId64 " pts %" PRId64 " time %" PRId64, frameNumber, pts, t);
+        fprintf(sys->p_dataLog, "%" PRId64 " %" PRId64 " %" PRId64"\n", frameNumber, pts, t);
+        fflush(sys->p_dataLog);
     }
 
 #if 0

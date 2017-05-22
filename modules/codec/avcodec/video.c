@@ -51,6 +51,7 @@ struct decoder_sys_t
 
     /* Video decoder specific part */
     mtime_t i_pts;
+    int64_t frameNumber;   //JS 5/17
 
     AVFrame          *p_ff_pic;
 
@@ -708,6 +709,9 @@ picture_t *DecodeVideo( decoder_t *p_dec, block_t **pp_block )
             p_sys->b_has_b_frames = true;
         }
 
+        /* Save the frame number, JS 11/15 */
+        p_sys->frameNumber = p_sys->p_ff_pic->display_picture_number;
+
         /* Compute the PTS */
         mtime_t i_pts =
                     p_sys->p_ff_pic->pkt_pts;
@@ -803,6 +807,7 @@ picture_t *DecodeVideo( decoder_t *p_dec, block_t **pp_block )
         if( i_pts > VLC_TS_INVALID)
         {
             p_pic->date = i_pts;
+            p_pic->frameNumber = i_pts;
 
             if( p_sys->b_first_frame )
             {
